@@ -47,12 +47,11 @@ public class FieldReader {
             if (context.reader() instanceof SequentialStoredFieldsLeafReader) {
                 SequentialStoredFieldsLeafReader reader = (SequentialStoredFieldsLeafReader) context.reader();
                 return reader.getSequentialStoredFieldsReader()::visitDocument;
-            } else {
-                return context.reader()::document;
             }
         } catch (IOException e) {
             throw Exceptions.toRuntimeException(e);
         }
+        throw new RuntimeException("Query is not ordered");
     }
 
     public static CheckedBiConsumer<Integer, StoredFieldVisitor, IOException> getFieldReader(LeafReaderContext context) {

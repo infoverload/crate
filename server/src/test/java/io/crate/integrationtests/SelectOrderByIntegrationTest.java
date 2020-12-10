@@ -218,7 +218,7 @@ public class SelectOrderByIntegrationTest extends SQLTransportIntegrationTest {
                 """);
         execute("copy uservisits from 'file:///Users/mkleen/uservisits.gz' with (compression = 'gzip')");
         execute("refresh table uservisits");
-        execute("select * from uservisits order by _id");
+        execute("select * from uservisits where \"searchWord\" = 'gigantoblast' order by \"visitDate\" desc");
         System.out.println("response = " + response);
     }
 }
