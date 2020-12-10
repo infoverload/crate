@@ -26,6 +26,7 @@ import io.crate.common.annotations.VisibleForTesting;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 
+import javax.annotation.Nonnull;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -101,25 +102,18 @@ public class NumericType extends DataType<BigDecimal> implements Streamer<BigDec
         }
 
         var mathContext = mathContextOrDefault();
-        if (value instanceof BigDecimal) {
-            return new BigDecimal(
-                ((BigDecimal) value).toBigInteger(),
-                mathContext
-            ).setScale(scaleOrDefault(), mathContext.getRoundingMode());
-        } else if (value instanceof String) {
-            return new BigDecimal(
-                new BigInteger((String) value),
-                mathContext
-            ).setScale(scaleOrDefault(), mathContext.getRoundingMode());
-        } else if (value instanceof Long
-                   || value instanceof Byte
-                   || value instanceof Integer
-                   || value instanceof Short) {
+        if (value instanceof Long
+            || value instanceof Byte
+            || value instanceof Integer
+            || value instanceof Short) {
             return new BigDecimal(
                 BigInteger.valueOf(((Number) value).longValue()),
                 mathContext
             ).setScale(scaleOrDefault(), mathContext.getRoundingMode());
-        } else if (value instanceof Float || value instanceof Double) {
+        } else if (value instanceof String
+                   || value instanceof Float
+                   || value instanceof Double
+                   || value instanceof BigDecimal) {
             return new BigDecimal(
                 value.toString(),
                 mathContext
@@ -142,6 +136,10 @@ public class NumericType extends DataType<BigDecimal> implements Streamer<BigDec
     public BigDecimal valueForInsert(Object value) {
         throw new UnsupportedOperationException(
             getName() + " type cannot be used in insert statements");
+    }
+
+    public static long size(@Nonnull BigDecimal value) {
+        return value.unscaledValue().bitLength() / 8 + 1;
     }
 
     @VisibleForTesting
@@ -205,8 +203,7 @@ public class NumericType extends DataType<BigDecimal> implements Streamer<BigDec
     @Override
     public BigDecimal readValueFrom(StreamInput in) throws IOException {
         if (in.readBoolean()) {
-            byte[] bytes = new byte[in.readVInt()];
-            in.readBytes(bytes, 0, bytes.length);
+            byte[] bytes = in.readByteArray();
             return new BigDecimal(
                 new BigInteger(bytes),
                 scaleOrDefault(),
@@ -221,9 +218,7 @@ public class NumericType extends DataType<BigDecimal> implements Streamer<BigDec
     public void writeValueTo(StreamOutput out, BigDecimal v) throws IOException {
         if (v != null) {
             out.writeBoolean(true);
-            var bytes = v.unscaledValue().toByteArray();
-            out.writeVInt(bytes.length);
-            out.writeBytes(bytes);
+            out.writeByteArray(v.unscaledValue().toByteArray());
         } else {
             out.writeBoolean(false);
         }
