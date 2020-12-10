@@ -44,9 +44,21 @@ public class OverflowAwareMutableLongTest {
     }
 
     @Test
-    public void test_add_with_overflow_operates_on_big_decimal() {
+    public void test_add_results_in_overflow_should_return_correct_big_decimal_sum() {
         var value = new OverflowAwareMutableLong(Long.MAX_VALUE);
         value.add(5L);
+
+        var expected = BigDecimal.valueOf(Long.MAX_VALUE).add(BigDecimal.valueOf(5));
+        assertThat(value.hasValue(), is(true));
+        assertThat(value.bigDecimalSum(), is(expected));
+        assertThat(value.value(), is(expected));
+    }
+
+    @Test
+    public void test_add_after_overflow_should_return_correct_big_decimal_sum() {
+        var value = new OverflowAwareMutableLong(Long.MAX_VALUE);
+        value.add(5L); // overflow
+
         value.add(5L);
 
         var expected = BigDecimal.valueOf(Long.MAX_VALUE).add(BigDecimal.TEN);

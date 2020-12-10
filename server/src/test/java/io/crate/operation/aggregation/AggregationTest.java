@@ -234,9 +234,9 @@ public abstract class AggregationTest extends ESTestCase {
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    public Object execPartialAggregationWithoutDocValues(AggregationFunction function,
-                                                         Object[][] data,
-                                                         boolean randomExtraStates) {
+    protected Object execPartialAggregationWithoutDocValues(AggregationFunction function,
+                                                            Object[][] data,
+                                                            boolean randomExtraStates) {
         var argumentsSize = function.signature().getArgumentTypes().size();
         InputCollectExpression[] inputs = new InputCollectExpression[argumentsSize];
         for (int i = 0; i < argumentsSize; i++) {

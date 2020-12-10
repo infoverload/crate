@@ -35,6 +35,7 @@ import io.crate.types.DoubleType;
 import io.crate.types.FloatType;
 import io.crate.types.IntegerType;
 import io.crate.types.LongType;
+import io.crate.types.NumericType;
 import io.crate.types.ShortType;
 import org.apache.lucene.index.DocValues;
 import org.apache.lucene.index.LeafReader;
@@ -71,12 +72,11 @@ public class NumericSumAggregation extends AggregationFunction<BigDecimal, BigDe
         this.signature = signature;
         this.boundSignature = boundSignature;
 
-        // usually the sum numeric aggregation function is going to be
-        // resolved after casting the sum parameter to the numeric type,
-        // e.g. sum(count::numeric(16, 2)). Having that, it
-        // is not possible to resolve the return type that will contain
-        // the precision and/or scale. Therefore, we infer the return
-        // type from the argument type.
+        // We want to preserve the scale and precision from the
+        // numeric argument type for the return type. So we use
+        // the incoming numeric type as return type instead of
+        // the return type from the signature `sum(count::numeric(16, 2))`
+        // should return the type `numeric(16, 2)` not `numeric`
         var argumentType = boundSignature.getArgumentDataTypes().get(0);
         assert argumentType.id() == DataTypes.NUMERIC.id();
         //noinspection unchecked
@@ -124,7 +124,7 @@ public class NumericSumAggregation extends AggregationFunction<BigDecimal, BigDe
     @Override
     public BigDecimal terminatePartial(RamAccounting ramAccounting, BigDecimal state) {
         if (state != null) {
-            ramAccounting.addBytes(state.unscaledValue().toByteArray().length);
+            ramAccounting.addBytes(NumericType.size(state));
         }
         return state;
     }
@@ -209,7 +209,7 @@ public class NumericSumAggregation extends AggregationFunction<BigDecimal, BigDe
                                         OverflowAwareMutableLong state) {
             if (state.hasValue()) {
                 var partialResult = state.value();
-                ramAccounting.addBytes(partialResult.unscaledValue().toByteArray().length);
+                ramAccounting.addBytes(NumericType.size(partialResult));
                 return returnType.implicitCast(partialResult);
             } else {
                 return null;
@@ -253,8 +253,8 @@ public class NumericSumAggregation extends AggregationFunction<BigDecimal, BigDe
         public Object partialResult(RamAccounting ramAccounting, BigDecimalValueWrapper state) {
             if (state.hasValue()) {
                 var partialResult = state.value();
-                ramAccounting.addBytes(partialResult.unscaledValue().toByteArray().length);
-                return partialResult;
+                ramAccounting.addBytes(NumericType.size(partialResult));
+                return returnType.implicitCast(partialResult);
             } else {
                 return null;
             }
@@ -297,8 +297,8 @@ public class NumericSumAggregation extends AggregationFunction<BigDecimal, BigDe
         public Object partialResult(RamAccounting ramAccounting, BigDecimalValueWrapper state) {
             if (state.hasValue()) {
                 var partialResult = state.value();
-                ramAccounting.addBytes(partialResult.unscaledValue().toByteArray().length);
-                return partialResult;
+                ramAccounting.addBytes(NumericType.size(partialResult));
+                return returnType.implicitCast(partialResult);
             } else {
                 return null;
             }

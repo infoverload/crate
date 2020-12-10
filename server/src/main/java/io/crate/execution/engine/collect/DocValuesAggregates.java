@@ -23,7 +23,6 @@
 package io.crate.execution.engine.collect;
 
 import io.crate.breaker.RamAccounting;
-import io.crate.common.collections.Lists2;
 import io.crate.data.BatchIterator;
 import io.crate.data.CollectingBatchIterator;
 import io.crate.data.Row;
@@ -42,6 +41,7 @@ import io.crate.expression.symbol.InputColumn;
 import io.crate.expression.symbol.Literal;
 import io.crate.expression.symbol.Symbol;
 import io.crate.expression.symbol.SymbolVisitor;
+import io.crate.expression.symbol.Symbols;
 import io.crate.lucene.FieldTypeLookup;
 import io.crate.lucene.LuceneQueryBuilder;
 import io.crate.metadata.FunctionImplementation;
@@ -49,6 +49,7 @@ import io.crate.metadata.Functions;
 import io.crate.metadata.Reference;
 import io.crate.metadata.SearchPath;
 import io.crate.metadata.doc.DocTableInfo;
+import io.crate.types.DataTypes;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.IndexSearcher;
@@ -67,7 +68,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -133,55 +133,6 @@ public class DocValuesAggregates {
     }
 
     @Nullable
-    private static MappedFieldType resolveInputToFieldType(FieldTypeLookup fieldTypeLookup,
-                                                           Symbol input) {
-        MappedFieldType mappedFieldType = fieldTypeLookup.get(((Reference) input).column().fqn());
-        if (mappedFieldType != null && !mappedFieldType.hasDocValues()) {
-            return null;
-        }
-        return mappedFieldType;
-    }
-
-    @Nullable
-    private static Symbol resolveSymbolToReferenceOrInputColumn(List<Symbol> toCollect,
-                                                                Symbol input) {
-        if (!(input instanceof InputColumn)) {
-            return null;
-        }
-        return toCollect.get(((InputColumn) input).index()).accept(
-            ReferenceOrInputColumnSymbolExtractor.INSTANCE,
-            null
-        );
-    }
-
-    private static class ReferenceOrInputColumnSymbolExtractor extends SymbolVisitor<Void, Symbol> {
-
-        public static final ReferenceOrInputColumnSymbolExtractor INSTANCE =
-            new ReferenceOrInputColumnSymbolExtractor();
-
-        @Override
-        public Symbol visitFunction(io.crate.expression.symbol.Function function, Void context) {
-            if (function.name().equals(ExplicitCastFunction.NAME)) {
-                var arg = function.arguments().get(0);
-                if (arg != null) {
-                    return arg.accept(this, null);
-                }
-            }
-            return null;
-        }
-
-        @Override
-        public Symbol visitReference(Reference reference, Void context) {
-            return reference;
-        }
-
-        @Override
-        public Symbol visitInputColumn(InputColumn inputColumn, Void context) {
-            return inputColumn;
-        }
-    }
-
-    @Nullable
     @SuppressWarnings("rawtypes")
     private static List<DocValueAggregator> createAggregators(Functions functions,
                                                               AggregationProjection aggregateProjection,
@@ -205,28 +156,29 @@ public class DocValuesAggregates {
                                                              List<Symbol> toCollect,
                                                              SearchPath searchPath) {
         ArrayList<DocValueAggregator> aggregator = new ArrayList<>(aggregations.size());
-
         for (int i = 0; i < aggregations.size(); i++) {
             Aggregation aggregation = aggregations.get(i);
             if (!aggregation.filter().equals(Literal.BOOLEAN_TRUE)) {
                 return null;
             }
 
-            List<Symbol> aggregationInputSymbols = Lists2.map(
-                aggregation.inputs(),
-                symbol -> resolveSymbolToReferenceOrInputColumn(toCollect, symbol)
-            );
-            if (aggregationInputSymbols.stream().anyMatch(Objects::isNull)) {
-                // We can extend this to instead return an adapter to the normal aggregation implementation
-                return null;
+            var aggregationReferences = new ArrayList<Symbol>(aggregation.inputs().size());
+            for (var input : aggregation.inputs()) {
+                var reference = input.accept(AggregationInputToReferenceResolver.INSTANCE, toCollect);
+                if (reference == null) {
+                    // We can extend this to instead return an adapter
+                    // to the normal aggregation implementation
+                    return null;
+                }
+                aggregationReferences.add(reference);
             }
-
-            List<MappedFieldType> fieldTypes = Lists2.map(
-                aggregationInputSymbols,
-                symbol -> resolveInputToFieldType(fieldTypeLookup, symbol));
-            if (fieldTypes.stream().anyMatch(Objects::isNull)) {
-                // We can extend this to instead return an adapter to the normal aggregation implementation
-                return null;
+            var fieldTypes = new ArrayList<MappedFieldType>(aggregationReferences.size());
+            for (var reference : aggregationReferences) {
+                var mappedFieldType = fieldTypeLookup.get(((Reference) reference).column().fqn());
+                if (mappedFieldType == null || !mappedFieldType.hasDocValues()) {
+                    return null;
+                }
+                fieldTypes.add(mappedFieldType);
             }
 
             FunctionImplementation func = functions.getQualified(aggregation, searchPath);
@@ -234,9 +186,8 @@ public class DocValuesAggregates {
                 throw new IllegalStateException(
                     "Expected an aggregationFunction for " + aggregation + " got: " + func);
             }
-
             DocValueAggregator<?> docValueAggregator = ((AggregationFunction<?, ?>) func).getDocValueAggregator(
-                Lists2.map(aggregationInputSymbols, Symbol::valueType),
+                Symbols.typeView(aggregationReferences),
                 fieldTypes
             );
             if (docValueAggregator == null) {
@@ -248,6 +199,39 @@ public class DocValuesAggregates {
         return aggregator;
     }
 
+    private static class AggregationInputToReferenceResolver extends SymbolVisitor<List<Symbol>, Symbol> {
+
+        public static final AggregationInputToReferenceResolver INSTANCE =
+            new AggregationInputToReferenceResolver();
+
+        @Override
+        public Symbol visitFunction(io.crate.expression.symbol.Function function, List<Symbol> toCollect) {
+            if (function.name().equals(ExplicitCastFunction.NAME)) {
+                var arg = function.arguments().get(0);
+                // Currently, it is the concrete case for the ::numeric explicit cast only.
+                // We have to resolve the target column type to be able to potentially get
+                // the doc values aggregator.
+                if (arg != null && function.valueType().id() == DataTypes.NUMERIC.id()) {
+                    return arg.accept(this, toCollect);
+                }
+            }
+            return null;
+        }
+
+        @Override
+        public Symbol visitReference(Reference reference, List<Symbol> context) {
+            return reference;
+        }
+
+        @Override
+        public Symbol visitInputColumn(InputColumn inputColumn, List<Symbol> toCollect) {
+            Symbol collectSymbol = toCollect.get(inputColumn.index());
+            if (collectSymbol == null) {
+                return null;
+            }
+            return collectSymbol.accept(this, toCollect);
+        }
+    }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private static Iterable<Row> getRow(RamAccounting ramAccounting,
