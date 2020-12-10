@@ -309,7 +309,7 @@ exceeded an `ArithmeticException` will be raised.
 
 If the ``sum`` aggregation on a numeric data type with the fixed length can
 potentially exceed its range it is possible to handle the overflow by casting
-the function argument to the :ref:` numeric type <numeric_type>` with an
+the function argument to the :ref:`numeric type <numeric_type>` with an
 arbitrary precision.
 
 .. Hidden: create user visits table
@@ -329,7 +329,7 @@ arbitrary precision.
     cr> REFRESH TABLE uservisits;
     REFRESH OK, 1 row affected  (... sec)
 
-The ``sum`` aggregation on the ``bigint`` column will result in the overflow
+The ``sum`` aggregation on the ``bigint`` column will result in an overflow
 in the following aggregation query::
 
     cr> SELECT sum(count)
@@ -337,7 +337,7 @@ in the following aggregation query::
     ArithmeticException[long overflow]
 
 To address the overflow of the sum aggregation on the given field, we cast
-the aggregation column to the numeric data type::
+the aggregation column to the ``numeric`` data type::
 
     cr> SELECT sum(count::numeric)
     ... FROM uservisits;
