@@ -190,8 +190,10 @@ public class SelectOrderByIntegrationTest extends SQLTransportIntegrationTest {
 
     @Test
     public void testOrderBy() {
-        execute("create table t1 (id int)");
-        execute("insert into t1 (id) values (1), (2), (3) , (4), (5), (6), (7), (8), (9), (10), (11)");
+        execute("create table t1 (id int, value string) clustered into 1 shards with (number_of_replicas=0)");
+        for(int i = 20; i > 0; i--) {
+            execute("insert into t1 (id, value) values (?, ?)", new Object[]{i, i+""});
+        }
         refresh();
         execute("select * from t1 order by id");
         System.out.println("response = " + response);
@@ -211,14 +213,14 @@ public class SelectOrderByIntegrationTest extends SQLTransportIntegrationTest {
                             "searchWord" STRING,
                             "duration" INTEGER,
                             INDEX uagent_plain USING PLAIN("UserAgent")
-                        ) WITH (
+                        ) clustered into 2 shards WITH (
                         number_of_replicas = 0,
                         refresh_interval = 0
                         );
                 """);
         execute("copy uservisits from 'file:///Users/mkleen/uservisits.gz' with (compression = 'gzip')");
         execute("refresh table uservisits");
-        execute("select * from uservisits order by _id asc limit 50");
+        execute("select * from uservisits limit 100");
         System.out.println("response = " + response);
     }
 }

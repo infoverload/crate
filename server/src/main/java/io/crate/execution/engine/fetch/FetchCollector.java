@@ -84,7 +84,6 @@ class FetchCollector {
         StreamBucket.Builder builder = new StreamBucket.Builder(streamers, ramAccounting);
         int[] ids = docIds.toArray();
         Arrays.sort(ids);
-        var hasSequentialDocs = hasSequentialDocs(ids);
         boolean isSequental = false;
         try (var borrowed = fetchTask.searcher(readerId)) {
             var searcher = borrowed.item();
@@ -98,7 +97,7 @@ class FetchCollector {
                 }
                 LeafReaderContext subReaderContext = leaves.get(readerIndex);
                 try {
-                    if (hasSequentialDocs && ids.length >= 10) {
+                    if ( hasSequentialDocs(ids) && ids.length >= 10) {
                         isSequental = true;
                     }
                     setNextDocId(subReaderContext, docId - subReaderContext.docBase, isSequental);
