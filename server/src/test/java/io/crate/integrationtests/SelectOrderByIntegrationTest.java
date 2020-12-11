@@ -193,7 +193,7 @@ public class SelectOrderByIntegrationTest extends SQLTransportIntegrationTest {
         execute("create table t1 (id int)");
         execute("insert into t1 (id) values (1), (2), (3) , (4), (5), (6), (7), (8), (9), (10), (11)");
         refresh();
-        execute("select * from t1 order by _id");
+        execute("select * from t1 order by id");
         System.out.println("response = " + response);
     }
 
@@ -218,7 +218,7 @@ public class SelectOrderByIntegrationTest extends SQLTransportIntegrationTest {
                 """);
         execute("copy uservisits from 'file:///Users/mkleen/uservisits.gz' with (compression = 'gzip')");
         execute("refresh table uservisits");
-        execute("select * from uservisits where \"searchWord\" = 'gigantoblast' order by \"visitDate\" desc");
+        execute("select * from uservisits order by _id asc limit 50");
         System.out.println("response = " + response);
     }
 }

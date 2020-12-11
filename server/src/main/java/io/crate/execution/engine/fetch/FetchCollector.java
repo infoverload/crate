@@ -98,12 +98,7 @@ class FetchCollector {
                 }
                 LeafReaderContext subReaderContext = leaves.get(readerIndex);
                 try {
-                    if (subReaderContext.reader() instanceof SequentialStoredFieldsLeafReader
-                        && hasSequentialDocs && ids.length >= 10) {
-                        // All the docs to fetch are adjacent but Lucene stored fields are optimized
-                        // for random access and don't optimize for sequential access - except for merging.
-                        // So we do a little hack here and pretend we're going to do merges in order to
-                        // get better sequential access.
+                    if (hasSequentialDocs && ids.length >= 10) {
                         isSequental = true;
                     }
                     setNextDocId(subReaderContext, docId - subReaderContext.docBase, isSequental);
@@ -117,7 +112,15 @@ class FetchCollector {
     }
 
     private static boolean hasSequentialDocs(int[] docIds) {
-        return docIds.length > 0 && docIds[docIds.length - 1] - docIds[0] == docIds.length - 1;
+        // checks if doc ids are in sequential order
+        // it is sequential if last element - first element = distance of elements in between
+        // e.g. [1,2,3,4,5] -> 5 - 1 = 4
+
+        if (docIds.length <= 0) {
+            return false;
+        }
+        int last = docIds[docIds.length - 1];
+        int first = docIds[0];
+        return last - first == docIds.length - 1;
     }
 }
-
