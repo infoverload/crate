@@ -58,6 +58,7 @@ public class NumericSumAggregation extends AggregationFunction<BigDecimal, BigDe
         DataTypes.NUMERIC.getTypeSignature(),
         DataTypes.NUMERIC.getTypeSignature()
     );
+    private static final long INIT_BIG_DECIMAL_SIZE = NumericType.size(BigDecimal.ZERO);
 
     public static void register(AggregationImplModule mod) {
         mod.register(SIGNATURE, NumericSumAggregation::new);
@@ -89,6 +90,7 @@ public class NumericSumAggregation extends AggregationFunction<BigDecimal, BigDe
                                Version indexVersionCreated,
                                Version minNodeInCluster,
                                MemoryManager memoryManager) {
+        ramAccounting.addBytes(INIT_BIG_DECIMAL_SIZE);
         return null;
     }
 
@@ -100,7 +102,9 @@ public class NumericSumAggregation extends AggregationFunction<BigDecimal, BigDe
         BigDecimal value = returnType.implicitCast(args[0].value());
         if (value != null) {
             if (state != null) {
-                state = state.add(value);
+                var newState = state.add(value);
+                ramAccounting.addBytes(NumericType.sizeDiff(newState, state));
+                state = newState;
             } else {
                 state = value;
             }
@@ -187,6 +191,7 @@ public class NumericSumAggregation extends AggregationFunction<BigDecimal, BigDe
 
         @Override
         public OverflowAwareMutableLong initialState(RamAccounting ramAccounting) {
+            ramAccounting.addBytes(INIT_BIG_DECIMAL_SIZE);
             return new OverflowAwareMutableLong(0L);
         }
 
@@ -200,7 +205,9 @@ public class NumericSumAggregation extends AggregationFunction<BigDecimal, BigDe
                           int doc,
                           OverflowAwareMutableLong state) throws IOException {
             if (values.advanceExact(doc) && values.docValueCount() == 1) {
+                var prevState = state.value();
                 state.add(values.nextValue());
+                ramAccounting.addBytes(NumericType.sizeDiff(state.value(), prevState));
             }
         }
 
@@ -208,9 +215,7 @@ public class NumericSumAggregation extends AggregationFunction<BigDecimal, BigDe
         public BigDecimal partialResult(RamAccounting ramAccounting,
                                         OverflowAwareMutableLong state) {
             if (state.hasValue()) {
-                var partialResult = state.value();
-                ramAccounting.addBytes(NumericType.size(partialResult));
-                return returnType.implicitCast(partialResult);
+                return returnType.implicitCast(state.value());
             } else {
                 return null;
             }
@@ -230,6 +235,7 @@ public class NumericSumAggregation extends AggregationFunction<BigDecimal, BigDe
 
         @Override
         public BigDecimalValueWrapper initialState(RamAccounting ramAccounting) {
+            ramAccounting.addBytes(INIT_BIG_DECIMAL_SIZE);
             return new BigDecimalValueWrapper(BigDecimal.ZERO);
         }
 
@@ -243,18 +249,20 @@ public class NumericSumAggregation extends AggregationFunction<BigDecimal, BigDe
                           int doc,
                           BigDecimalValueWrapper state) throws IOException {
             if (values.advanceExact(doc) && values.docValueCount() == 1) {
+                var prevState = state.value();
+
                 var fieldValue = returnType.implicitCast(
                     NumericUtils.sortableLongToDouble(values.nextValue()));
                 state.setValue(state.value().add(fieldValue));
+
+                ramAccounting.addBytes(NumericType.sizeDiff(state.value(), prevState));
             }
         }
 
         @Override
         public Object partialResult(RamAccounting ramAccounting, BigDecimalValueWrapper state) {
             if (state.hasValue()) {
-                var partialResult = state.value();
-                ramAccounting.addBytes(NumericType.size(partialResult));
-                return returnType.implicitCast(partialResult);
+                return returnType.implicitCast(state.value());
             } else {
                 return null;
             }
@@ -274,6 +282,7 @@ public class NumericSumAggregation extends AggregationFunction<BigDecimal, BigDe
 
         @Override
         public BigDecimalValueWrapper initialState(RamAccounting ramAccounting) {
+            ramAccounting.addBytes(INIT_BIG_DECIMAL_SIZE);
             return new BigDecimalValueWrapper(BigDecimal.ZERO);
         }
 
@@ -287,18 +296,20 @@ public class NumericSumAggregation extends AggregationFunction<BigDecimal, BigDe
                           int doc,
                           BigDecimalValueWrapper state) throws IOException {
             if (values.advanceExact(doc) && values.docValueCount() == 1) {
+                var prevState = state.value();
+
                 var fieldValue = returnType.implicitCast(
                     NumericUtils.sortableIntToFloat((int) values.nextValue()));
                 state.setValue(state.value().add(fieldValue));
+
+                ramAccounting.addBytes(NumericType.sizeDiff(state.value(), prevState));
             }
         }
 
         @Override
         public Object partialResult(RamAccounting ramAccounting, BigDecimalValueWrapper state) {
             if (state.hasValue()) {
-                var partialResult = state.value();
-                ramAccounting.addBytes(NumericType.size(partialResult));
-                return returnType.implicitCast(partialResult);
+                return returnType.implicitCast(state.value());
             } else {
                 return null;
             }
