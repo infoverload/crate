@@ -232,6 +232,7 @@ public class TestStatementBuilder {
         printStatement("drop table test");
         printStatement("drop table if exists test");
         printStatement("drop table bar.foo");
+        printStatement("drop table bar.foo, foo.bar");
     }
 
     @Test
