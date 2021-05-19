@@ -21,6 +21,7 @@
 
 package io.crate.analyze;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.logging.log4j.LogManager;
@@ -55,7 +56,11 @@ class DropTableAnalyzer {
     }
 
     public AnalyzedDropTable<DocTableInfo> analyze(DropTable<?> node, SessionContext sessionContext) {
-        return analyze(node.table().getName(), node.dropIfExists(), sessionContext);
+        var tables = new ArrayList<AnalyzedDropTable<DocTableInfo>>();
+        for (var table : node.tables()) {
+            tables.add(analyze(table.getName(), node.dropIfExists(), sessionContext));
+        }
+        return new AnalyzedDropTable<>(tables, node.dropIfExists());
     }
 
     public AnalyzedDropTable<BlobTableInfo> analyze(DropBlobTable<?> node, SessionContext sessionContext) {
